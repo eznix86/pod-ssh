@@ -56,6 +56,7 @@ pod-ssh [COMMAND | POD@NAMESPACE]
 | `pod-ssh clear-history` | Clear connection history with confirmation |
 | `pod-ssh last`          | Reconnect to the most recent pod           |
 | `pod-ssh last~N`        | Reconnect to the Nth most recent pod       |
+| `pod-ssh self-update`   | Update the script from GitHub              |
 
 ### Direct Connection
 

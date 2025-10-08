@@ -158,12 +158,14 @@ Commands:
   clear-history   Clear connection history with confirmation
   help            Show this help message
   last[~N]        Reconnect to last or Nth previous connection
+  self-update     Update this script from GitHub
 
 Examples:
   pod-ssh
   pod-ssh history
   pod-ssh clear-history
   pod-ssh help
+  pod-ssh self-update
   pod-ssh mypod@namespace
   pod-ssh last
   pod-ssh last~2
@@ -303,6 +305,22 @@ def connect(target):
     save_history(f"{pod}@{namespace}")
     save_last(f"{pod}@{namespace}")
 
+def self_update():
+    """Update this script in place from the GitHub repo."""
+    script_path = Path(__file__).resolve()
+
+    result = run(
+        f"sudo curl -sSL "
+        f"https://raw.githubusercontent.com/eznix86/pod-ssh/main/pod-ssh "
+        f"-o {script_path} && sudo chmod +x {script_path}",
+        check=False,
+    )
+
+    if result.returncode == 0:
+        run("gum style --foreground 46 --bold 'Self-update complete.'")
+    else:
+        run("gum style --foreground 196 --bold 'Self-update failed.'")
+
 
 def main():
     install_if_missing("gum")
@@ -317,6 +335,8 @@ def main():
     cmd = args[0]
     if cmd == "help":
         print_help()
+    elif cmd == "self-update":
+        self_update()
     elif cmd == "history":
         history = load_history()
         if not history:
