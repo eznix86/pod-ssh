@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+import os
+import sys
+import platform
+import subprocess
+from pathlib import Path
+
+HISTORY_FILE = Path.home() / ".pod_ssh_history"
+LAST_FILE = Path.home() / ".pod_ssh_last"
+
+
+def run(cmd, capture=False, check=True):
+    try:
+        return subprocess.run(
+            cmd,
+            shell=True,
+            check=check,
+            text=True,
+            stdout=subprocess.PIPE if capture else None,
+        )
+    except KeyboardInterrupt:
+        sys.exit(130)
+
+
+def is_installed(bin_name):
+    return (
+        subprocess.run(
+            f"command -v {bin_name}",
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+    
+def gum_macos():
+    run("brew install gum")
+
+def gum_arch():
+    if is_installed("yay"):
+        run("yay -S --noconfirm gum-bin")
+        return
+    if is_installed("paru"):
+        run("paru -S --noconfirm gum-bin")
+        return
+    run("sudo pacman -S --noconfirm wget tar")
+    gum_generic_linux()
+
+def gum_debian():
+    run("sudo apt-get update -y && sudo apt-get install -y wget tar")
+    gum_generic_linux()
+
+def gum_generic_linux():
+    url = "https://github.com/charmbracelet/gum/releases/latest/download/gum_$(uname -s)_$(uname -m).tar.gz"
+    run(f"wget -q {url} -O /tmp/gum.tgz")
+    run("sudo tar -C /usr/local/bin -xzf /tmp/gum.tgz gum")
+
+# ---------------- Kubectl Installers ---------------- #
+
+def kubectl_macos():
+    run("brew install kubectl")
+
+def kubectl_arch():
+    run("sudo pacman -S --noconfirm kubectl")
+
+def kubectl_debian():
+    run("sudo apt-get update -y && sudo apt-get install -y curl")
+    run("curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl")
+    run("sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl")
+    run("rm kubectl")
+
+def kubectl_generic_linux():
+    run("curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/$(uname -m)/kubectl")
+    run("sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl")
+    run("rm kubectl")
+
+
+
+def get_distro():
+    """Detect Linux distribution (arch, debian, redhat, unknown)."""
+    if platform.system().lower() != "linux":
+        return None
+
+    markers = {
+        "arch": "/etc/arch-release",
+        "debian": "/etc/debian_version",
+        "redhat": "/etc/redhat-release",
+    }
+    for name, path in markers.items():
+        if Path(path).exists():
+            return name
+
+    os_release = Path("/etc/os-release")
+    if os_release.exists():
+        content = os_release.read_text().lower()
+        if "arch" in content:
+            return "arch"
+        if "debian" in content or "ubuntu" in content:
+            return "debian"
+        if any(x in content for x in ("rhel", "centos", "fedora")):
+            return "redhat"
+
+    return "unknown"
+
+
+GUM_INSTALLERS = {
+    "darwin": gum_macos,
+    "linux:arch": gum_arch,
+    "linux:debian": gum_debian,
+    "linux:redhat": gum_generic_linux,
+    "linux:unknown": gum_generic_linux,
+}
+
+KUBECTL_INSTALLERS = {
+    "darwin": kubectl_macos,
+    "linux:arch": kubectl_arch,
+    "linux:debian": kubectl_debian,
+    "linux:redhat": kubectl_generic_linux,
+    "linux:unknown": kubectl_generic_linux,
+}
+
+def install_if_missing(bin_name):
+    """Install a binary if it is not already installed."""
+    if is_installed(bin_name):
+        return
+
+    system = platform.system().lower()
+    distro = get_distro() if system == "linux" else None
+    key = system if distro is None else f"{system}:{distro}"
+
+    installer_map = {
+        "gum": GUM_INSTALLERS,
+        "kubectl": KUBECTL_INSTALLERS,
+    }
+
+    installer_func = installer_map.get(bin_name, {}).get(key)
+    if installer_func:
+        installer_func()
+    else:
+        sys.exit(f"Unsupported OS/distro for {bin_name} installation: {key}")
+
+def print_help():
+    help_text = """Usage: pod-ssh [COMMAND|POD@NAMESPACE]
+
+Commands:
+  history         Show connection history interactively
+  clear-history   Clear connection history with confirmation
+  help            Show this help message
+  last[~N]        Reconnect to last or Nth previous connection
+
+Examples:
+  pod-ssh
+  pod-ssh history
+  pod-ssh clear-history
+  pod-ssh help
+  pod-ssh mypod@namespace
+  pod-ssh last
+  pod-ssh last~2
+"""
+    run(f"gum format --theme=dark '{help_text}'")
+
+
+def load_history():
+    if HISTORY_FILE.exists():
+        with open(HISTORY_FILE) as f:
+            return [line.strip() for line in f if line.strip()]
+    return []
+
+
+def save_history(entry):
+    history = load_history()
+    if entry not in history:
+        history.append(entry)
+    with open(HISTORY_FILE, "w") as f:
+        f.write("\n".join(history))
+
+
+def save_last(entry):
+    last_entries = load_last()
+    last_entries.insert(0, entry)
+    with open(LAST_FILE, "w") as f:
+        f.write("\n".join(last_entries[:20]))
+
+
+def load_last():
+    if LAST_FILE.exists():
+        with open(LAST_FILE) as f:
+            return [line.strip() for line in f if line.strip()]
+    return []
+
+
+def clear_history():
+    confirm = (
+        subprocess.run(
+            "gum confirm 'Are you sure you want to clear history?'", shell=True
+        ).returncode
+        == 0
+    )
+    if confirm:
+        if HISTORY_FILE.exists():
+            HISTORY_FILE.unlink()
+        run("gum style --foreground 212 --bold 'History cleared.'")
+
+
+def select_namespace():
+    out = run("kubectl get namespaces --no-headers", capture=True).stdout.strip()
+    if not out:
+        run("gum style --foreground 196 'No namespaces found.'")
+        sys.exit(1)
+    namespaces = [line.split()[0] for line in out.splitlines()]
+    list_str = "\n".join(namespaces)
+    proc = run(
+        f"echo '{list_str}' | gum choose --header='Select a namespace:'",
+        capture=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        sys.exit(130)
+    return proc.stdout.strip() or None
+
+
+def select_pod(namespace):
+    out = run(
+        f"kubectl get pods -n {namespace} --no-headers", capture=True
+    ).stdout.strip()
+    if not out:
+        run(f"gum style --foreground 196 'No pods found in namespace {namespace}.'")
+        sys.exit(1)
+    pods = [line.split()[0] for line in out.splitlines()]
+    list_str = "\n".join(pods)
+    proc = run(
+        f"echo '{list_str}' | gum choose --header='Select a pod in {namespace}:'",
+        capture=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        sys.exit(130)
+    return proc.stdout.strip() or None
+
+
+def interactive_select_target():
+    ns = select_namespace()
+    if not ns:
+        return None
+    pod = select_pod(ns)
+    if not pod:
+        return None
+    return f"{pod}@{ns}"
+
+
+def connect(target):
+    pod_pattern, namespace = target.split("@")
+
+    out = run(
+        f"kubectl get pods -n {namespace} --no-headers",
+        capture=True,
+        check=False
+    ).stdout.strip()
+
+    if not out:
+        run(f"gum style --foreground 196 'No pods found in namespace {namespace}.'")
+        sys.exit(1)
+
+    pods = [line.split()[0] for line in out.splitlines()]
+
+    pod = next((p for p in pods if p == pod_pattern), None)
+
+    if not pod:
+        matches = [p for p in pods if pod_pattern in p]
+        if len(matches) == 1:
+            pod = matches[0]
+        elif len(matches) > 1:
+            list_str = "\n".join(matches)
+            proc = run(
+                f"echo '{list_str}' | gum choose --header='Multiple matches, select a pod:'",
+                capture=True,
+                check=False
+            )
+            if proc.returncode != 0:
+                sys.exit(130)
+            pod = proc.stdout.strip()
+
+    if not pod:
+        run(f"gum style --foreground 196 'No matching pod found for pattern \"{pod_pattern}\".'")
+        sys.exit(1)
+    run(
+        f"gum spin --spinner line --title 'Checking pod {pod}@{namespace}' -- kubectl get pod {pod} -n {namespace}",
+        check=False,
+    )
+    
+    os.system(f"kubectl exec -it -n {namespace} {pod} -- sh")
+    save_history(f"{pod}@{namespace}")
+    save_last(f"{pod}@{namespace}")
+
+
+def main():
+    
+    install_if_missing("gum")
+    install_if_missing("kubectl")
+    
+    args = sys.argv[1:]
+    if not args:
+        target = interactive_select_target()
+        if target:
+            connect(target)
+        return
+    cmd = args[0]
+    if cmd == "help":
+        print_help()
+    elif cmd == "history":
+        history = load_history()
+        if not history:
+            run("gum style --foreground 196 'No history yet.'")
+            return
+        list_str = "\n".join(history)
+        proc = run(
+            f"echo '{list_str}' | gum choose --header='Select history entry:'",
+            capture=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            sys.exit(130)
+        selected = proc.stdout.strip()
+        if selected:
+            connect(selected)
+    elif cmd == "clear-history":
+        clear_history()
+    elif cmd.startswith("last"):
+        last_entries = load_last()
+        if not last_entries:
+            run("gum style --foreground 196 'No previous connections.'")
+            return
+        if "~" in cmd:
+            try:
+                n = int(cmd.split("~")[1])
+            except ValueError:
+                n = 1
+        else:
+            n = 1
+        if n <= len(last_entries):
+            connect(last_entries[n - 1])
+        else:
+            run("gum style --foreground 196 'Not enough last entries.'")
+    elif "@" in cmd:
+        connect(cmd)
+    else:
+        run(f"gum style --foreground 196 'Unknown command: {cmd}'")
+        print_help()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)
