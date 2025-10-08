@@ -2,7 +2,9 @@
 
 `pod-ssh` is a command-line utility for connecting to Kubernetes pods using an interactive interface powered by [Gum](https://github.com/charmbracelet/gum) and `kubectl`.
 
-![pod-ssh.gif](./pod-ssh.gif)
+<p align="center">
+  <img src="./pod-ssh.gif">
+</p>
 
 ## Installation
 
