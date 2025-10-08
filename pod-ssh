@@ -151,7 +151,7 @@ def install_if_missing(bin_name):
 
 
 def print_help():
-    help_text = f"""Usage: {Path(__file__).name} [COMMAND|POD@NAMESPACE]
+    help_text = f"""Usage: {Path(__file__).name} [COMMAND|POD@NAMESPACE [SHELL]]
 
 Commands:
   history         Show connection history interactively
@@ -167,6 +167,7 @@ Examples:
   pod-ssh help
   pod-ssh self-update
   pod-ssh mypod@namespace
+  pod-ssh mypod@namespace bash
   pod-ssh last
   pod-ssh last~2
 """
@@ -261,7 +262,7 @@ def interactive_select_target():
     return f"{pod}@{ns}"
 
 
-def connect(target):
+def connect(target, shell="sh"):
     pod_pattern, namespace = target.split("@")
 
     out = run(
@@ -303,8 +304,8 @@ def connect(target):
     )
 
     container = select_container(pod, namespace)
-    
-    os.system(f"kubectl exec -it -n {namespace} {pod} -c {container} -- sh")
+
+    os.system(f"kubectl exec -it -n {namespace} {pod} -c {container} -- {shell}")
     
     save_history(f"{pod}@{namespace}")
     save_last(f"{pod}@{namespace}")
@@ -397,7 +398,8 @@ def main():
         else:
             run("gum style --foreground 196 'Not enough last entries.'")
     elif "@" in cmd:
-        connect(cmd)
+        shell = args[1] if len(args) > 1 else "sh"
+        connect(cmd, shell)
     else:
         run(f"gum style --foreground 196 'Unknown command: {cmd}'")
         print_help()
