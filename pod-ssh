@@ -296,12 +296,16 @@ def connect(target):
             f"gum style --foreground 196 'No matching pod found for pattern \"{pod_pattern}\".'"
         )
         sys.exit(1)
+
     run(
         f"gum spin --spinner line --title 'Checking pod {pod}@{namespace}' -- kubectl get pod {pod} -n {namespace}",
         check=False,
     )
 
-    os.system(f"kubectl exec -it -n {namespace} {pod} -- sh")
+    container = select_container(pod, namespace)
+    
+    os.system(f"kubectl exec -it -n {namespace} {pod} -c {container} -- sh")
+    
     save_history(f"{pod}@{namespace}")
     save_last(f"{pod}@{namespace}")
 
@@ -320,6 +324,27 @@ def self_update():
         run("gum style --foreground 46 --bold 'Self-update complete.'")
     else:
         run("gum style --foreground 196 --bold 'Self-update failed.'")
+
+def select_container(pod, namespace):
+    out = run(
+        f"kubectl get pod {pod} -n {namespace} -o jsonpath='{{.spec.containers[*].name}}'",
+        capture=True
+    ).stdout.strip()
+    containers = out.split()
+    if not containers:
+        run(f"gum style --foreground 196 'No containers found in pod {pod}.'")
+        sys.exit(1)
+    if len(containers) == 1:
+        return containers[0]
+    list_str = "\n".join(containers)
+    proc = run(
+        f"echo '{list_str}' | gum choose --header='Select a container in {pod}:'",
+        capture=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        sys.exit(130)
+    return proc.stdout.strip()
 
 
 def main():
