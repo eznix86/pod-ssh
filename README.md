@@ -8,8 +8,6 @@
 
 ## Installation
 
-Clone this repository and make the script executable:
-
 ```bash
 sudo curl -sSL \
   https://raw.githubusercontent.com/eznix86/pod-ssh/main/pod-ssh \
