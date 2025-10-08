@@ -32,9 +32,11 @@ def is_installed(bin_name):
         ).returncode
         == 0
     )
-    
+
+
 def gum_macos():
     run("brew install gum")
+
 
 def gum_arch():
     if is_installed("yay"):
@@ -46,34 +48,41 @@ def gum_arch():
     run("sudo pacman -S --noconfirm wget tar")
     gum_generic_linux()
 
+
 def gum_debian():
     run("sudo apt-get update -y && sudo apt-get install -y wget tar")
     gum_generic_linux()
+
 
 def gum_generic_linux():
     url = "https://github.com/charmbracelet/gum/releases/latest/download/gum_$(uname -s)_$(uname -m).tar.gz"
     run(f"wget -q {url} -O /tmp/gum.tgz")
     run("sudo tar -C /usr/local/bin -xzf /tmp/gum.tgz gum")
 
-# ---------------- Kubectl Installers ---------------- #
 
 def kubectl_macos():
     run("brew install kubectl")
 
+
 def kubectl_arch():
     run("sudo pacman -S --noconfirm kubectl")
 
+
 def kubectl_debian():
     run("sudo apt-get update -y && sudo apt-get install -y curl")
-    run("curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl")
+    run(
+        "curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    )
     run("sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl")
     run("rm kubectl")
+
 
 def kubectl_generic_linux():
-    run("curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/$(uname -m)/kubectl")
+    run(
+        "curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/$(uname -m)/kubectl"
+    )
     run("sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl")
     run("rm kubectl")
-
 
 
 def get_distro():
@@ -119,6 +128,7 @@ KUBECTL_INSTALLERS = {
     "linux:unknown": kubectl_generic_linux,
 }
 
+
 def install_if_missing(bin_name):
     """Install a binary if it is not already installed."""
     if is_installed(bin_name):
@@ -139,8 +149,9 @@ def install_if_missing(bin_name):
     else:
         sys.exit(f"Unsupported OS/distro for {bin_name} installation: {key}")
 
+
 def print_help():
-    help_text = """Usage: pod-ssh [COMMAND|POD@NAMESPACE]
+    help_text = f"""Usage: {Path(__file__).name} [COMMAND|POD@NAMESPACE]
 
 Commands:
   history         Show connection history interactively
@@ -252,9 +263,7 @@ def connect(target):
     pod_pattern, namespace = target.split("@")
 
     out = run(
-        f"kubectl get pods -n {namespace} --no-headers",
-        capture=True,
-        check=False
+        f"kubectl get pods -n {namespace} --no-headers", capture=True, check=False
     ).stdout.strip()
 
     if not out:
@@ -274,30 +283,31 @@ def connect(target):
             proc = run(
                 f"echo '{list_str}' | gum choose --header='Multiple matches, select a pod:'",
                 capture=True,
-                check=False
+                check=False,
             )
             if proc.returncode != 0:
                 sys.exit(130)
             pod = proc.stdout.strip()
 
     if not pod:
-        run(f"gum style --foreground 196 'No matching pod found for pattern \"{pod_pattern}\".'")
+        run(
+            f"gum style --foreground 196 'No matching pod found for pattern \"{pod_pattern}\".'"
+        )
         sys.exit(1)
     run(
         f"gum spin --spinner line --title 'Checking pod {pod}@{namespace}' -- kubectl get pod {pod} -n {namespace}",
         check=False,
     )
-    
+
     os.system(f"kubectl exec -it -n {namespace} {pod} -- sh")
     save_history(f"{pod}@{namespace}")
     save_last(f"{pod}@{namespace}")
 
 
 def main():
-    
     install_if_missing("gum")
     install_if_missing("kubectl")
-    
+
     args = sys.argv[1:]
     if not args:
         target = interactive_select_target()

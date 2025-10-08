@@ -17,6 +17,9 @@ sudo chmod +x /usr/local/bin/pod-ssh
 
 Ensure `/usr/local/bin` is in your `PATH`.
 
+
+Note: **You can keep it as `pod-ssh` but it may also rename the script to any name you like, for example to `kssh` or `pssh`** 
+
 ---
 
 ## Dependencies
