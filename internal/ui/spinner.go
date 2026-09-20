@@ -27,8 +27,8 @@ func Spin(ctx context.Context, title string, output io.Writer, work func() error
 		title:   title,
 		work:    work,
 	}
-	model.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	program := tea.NewProgram(model, tea.WithContext(ctx), tea.WithOutput(output))
+	model.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#00D7AF"))
+	program := tea.NewProgram(model, tea.WithContext(ctx), tea.WithOutput(output), tea.WithEnvironment(bubbleTeaEnvironment()))
 	result, err := program.Run()
 	if err != nil {
 		return fmt.Errorf("run progress display: %w", err)

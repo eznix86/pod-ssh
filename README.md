@@ -40,6 +40,12 @@ mise install
 mise run build
 ```
 
+If `mise` is unavailable, install it with:
+
+```bash
+curl https://mise.run | sh
+```
+
 The binary is written to `bin/pod-ssh`.
 
 Run the project-owned checks and smoke tests with:
@@ -85,6 +91,10 @@ Choose a shell using the existing second positional argument:
 ```bash
 pod-ssh api@production bash
 ```
+
+If the requested shell is not installed in the container, `pod-ssh` tries the
+other common shells (`sh`, `bash`, and `zsh`) before returning the original
+exec error.
 
 ### History
 

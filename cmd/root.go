@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -318,18 +319,52 @@ func runConnection(ctx context.Context, options *options, targetValue string, co
 	}
 
 	color.New(color.FgCyan).Fprintf(options.errOutput, "Connecting to %s@%s (%s)...\n", podName, namespace, container)
-	if err := client.Exec(ctx, kube.ExecOptions{
-		Namespace: namespace,
-		Pod:       podName,
-		Container: container,
-		Command:   command,
-		Stdin:     options.input,
-		Stdout:    options.output,
-		Stderr:    options.errOutput,
-	}); err != nil {
+	if err := execShell(ctx, client, options, namespace, podName, container, command); err != nil {
 		return err
 	}
 	return options.store.Save(target.Target{Pod: podName, Namespace: namespace}.String())
+}
+
+var fallbackShells = []string{"sh", "bash", "zsh"}
+
+func execShell(ctx context.Context, client *kube.Client, options *options, namespace, podName, container string, command []string) error {
+	if len(command) == 0 {
+		return fmt.Errorf("no shell command provided")
+	}
+
+	preferred := command[0]
+	tried := make([]string, 0, len(fallbackShells))
+	var lastErr error
+	for _, shell := range append([]string{preferred}, fallbackShells...) {
+		if shell == "" || containsShell(tried, shell) {
+			continue
+		}
+		tried = append(tried, shell)
+		if err := client.Exec(ctx, kube.ExecOptions{
+			Namespace: namespace,
+			Pod:       podName,
+			Container: container,
+			Command:   []string{shell},
+			Stdin:     options.input,
+			Stdout:    options.output,
+			Stderr:    options.errOutput,
+		}); err != nil {
+			if !kube.IsCommandNotFound(err) {
+				return err
+			}
+			lastErr = err
+			if len(tried) < len(fallbackShells) {
+				fmt.Fprintf(options.errOutput, "Shell %q is unavailable; trying another shell...\n", shell)
+			}
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("no supported shell found in container (tried %s): %w", strings.Join(tried, ", "), lastErr)
+}
+
+func containsShell(shells []string, target string) bool {
+	return slices.Contains(shells, target)
 }
 
 func selectNamespace(ctx context.Context, client *kube.Client, options *options) (string, error) {

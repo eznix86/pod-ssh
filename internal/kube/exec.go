@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -24,6 +25,17 @@ type ExecOptions struct {
 	Stdin     io.Reader
 	Stdout    io.Writer
 	Stderr    io.Writer
+}
+
+// IsCommandNotFound reports whether Kubernetes rejected an exec command
+// because its executable is not present in the container.
+func IsCommandNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "executable file not found") ||
+		strings.Contains(message, "command not found")
 }
 
 // Exec starts an interactive TTY command in a pod container.

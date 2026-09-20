@@ -8,6 +8,7 @@ import (
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // ErrCancelled is returned when the user closes a picker without selecting an item.
@@ -41,13 +42,21 @@ func Select(title string, items []Item, input io.Reader, output io.Writer) (Item
 
 	delegate := list.NewDefaultDelegate()
 	delegate.SetSpacing(0)
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, false, true).
+		BorderForeground(lipgloss.Color("#00D7AF")).
+		Foreground(lipgloss.Color("#00D7AF")).
+		Padding(0, 0, 0, 1)
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedTitle.Foreground(lipgloss.Color("#7DDFCA"))
 	model := pickerModel{list: list.New(listItems, delegate, 80, 18)}
 	model.list.Title = title
+	model.list.Styles.Title = lipgloss.NewStyle().Foreground(lipgloss.Color("#00D7AF")).Bold(true)
+	model.list.Styles.Filter.Cursor.Color = lipgloss.Color("#00D7AF")
 	model.list.SetShowHelp(true)
 	model.list.SetFilteringEnabled(true)
 	model.list.DisableQuitKeybindings()
 
-	program := tea.NewProgram(model, tea.WithInput(input), tea.WithOutput(output))
+	program := tea.NewProgram(model, tea.WithInput(input), tea.WithOutput(output), tea.WithEnvironment(bubbleTeaEnvironment()))
 	result, err := program.Run()
 	if err != nil {
 		return Item{}, fmt.Errorf("run %s picker: %w", title, err)
