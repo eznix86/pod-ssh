@@ -216,21 +216,36 @@ def clear_history():
         run("gum style --foreground 212 --bold 'History cleared.'")
 
 
+def select_from_list(options, header):
+    """Let the user search a list and select one item."""
+    try:
+        proc = subprocess.run(
+            [
+                "gum",
+                "filter",
+                "--limit=1",
+                f"--header={header}",
+                "--placeholder=Type to search...",
+            ],
+            input="\n".join(options),
+            text=True,
+            stdout=subprocess.PIPE,
+        )
+    except KeyboardInterrupt:
+        sys.exit(130)
+
+    if proc.returncode != 0:
+        sys.exit(130)
+    return proc.stdout.strip() or None
+
+
 def select_namespace():
     out = run("kubectl get namespaces --no-headers", capture=True).stdout.strip()
     if not out:
         run("gum style --foreground 196 'No namespaces found.'")
         sys.exit(1)
     namespaces = [line.split()[0] for line in out.splitlines()]
-    list_str = "\n".join(namespaces)
-    proc = run(
-        f"echo '{list_str}' | gum choose --header='Select a namespace:'",
-        capture=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        sys.exit(130)
-    return proc.stdout.strip() or None
+    return select_from_list(namespaces, "Select a namespace:")
 
 
 def select_pod(namespace):
@@ -241,15 +256,7 @@ def select_pod(namespace):
         run(f"gum style --foreground 196 'No pods found in namespace {namespace}.'")
         sys.exit(1)
     pods = [line.split()[0] for line in out.splitlines()]
-    list_str = "\n".join(pods)
-    proc = run(
-        f"echo '{list_str}' | gum choose --header='Select a pod in {namespace}:'",
-        capture=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        sys.exit(130)
-    return proc.stdout.strip() or None
+    return select_from_list(pods, f"Select a pod in {namespace}:")
 
 
 def interactive_select_target():
@@ -282,15 +289,7 @@ def connect(target, shell="sh"):
         if len(matches) == 1:
             pod = matches[0]
         elif len(matches) > 1:
-            list_str = "\n".join(matches)
-            proc = run(
-                f"echo '{list_str}' | gum choose --header='Multiple matches, select a pod:'",
-                capture=True,
-                check=False,
-            )
-            if proc.returncode != 0:
-                sys.exit(130)
-            pod = proc.stdout.strip()
+            pod = select_from_list(matches, "Multiple matches, select a pod:")
 
     if not pod:
         run(
