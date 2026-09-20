@@ -1,6 +1,17 @@
 # Release Notes
 
-## [Unreleased](https://github.com/eznix86/pod-ssh/compare/v1.2.0...HEAD)
+## [Unreleased](https://github.com/eznix86/pod-ssh/compare/v2.0.0...HEAD)
+
+## [v2.0.0](https://github.com/eznix86/pod-ssh/compare/v1.2.0...v2.0.0) - 2026-09-20
+
+<!-- Release notes generated using configuration in .github/release.yml at v2.0.0 -->
+### What's Changed
+
+#### Other Changes
+
+* Rewrite pod-ssh in Go by @eznix86 in https://github.com/eznix86/pod-ssh/pull/4
+
+**Full Changelog**: https://github.com/eznix86/pod-ssh/compare/v1.2.0...v2.0.0
 
 ## [v1.2.0](https://github.com/eznix86/pod-ssh/compare/v1.1.0...v1.2.0) - 2026-09-20
 
