@@ -93,6 +93,9 @@ Interactive pod selection:
 pod-ssh
 ```
 
+Start typing in the namespace or pod picker to search the available entries,
+then use the arrow keys and Enter to select one.
+
 Reconnect to the last used pod:
 
 ```bash
