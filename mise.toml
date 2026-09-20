@@ -1,0 +1,42 @@
+[tools]
+go = "1.27.1"
+goreleaser = "2.18.2"
+
+[tasks.build]
+description = "Build pod-ssh."
+env = { GOCACHE = "/tmp/pod-ssh-go-cache" }
+run = "go build -ldflags '-X github.com/eznix86/pod-ssh/cmd.Version=dev' -o bin/pod-ssh ."
+
+[tasks.test]
+description = "Run the test suite."
+env = { GOCACHE = "/tmp/pod-ssh-go-cache" }
+run = "go test ./..."
+
+[tasks.check]
+description = "Format, vet, and test the project."
+env = { GOCACHE = "/tmp/pod-ssh-go-cache" }
+run = [
+  "go fix ./...",
+  "gofmt -w .",
+  "go vet ./...",
+  "go test -race ./...",
+]
+
+[tasks.smoke]
+description = "Build and smoke-test the CLI surface."
+depends = ["build"]
+env = { GOCACHE = "/tmp/pod-ssh-go-cache" }
+run = [
+  "./bin/pod-ssh version",
+  "./bin/pod-ssh completion zsh >/dev/null",
+  "./bin/pod-ssh --help >/dev/null",
+]
+
+[tasks.release-check]
+description = "Validate the GoReleaser configuration."
+run = "goreleaser check"
+
+[tasks.release-snapshot]
+description = "Build release artifacts without publishing them."
+env = { GOCACHE = "/tmp/pod-ssh-go-cache" }
+run = "goreleaser release --snapshot --clean"

@@ -1,136 +1,146 @@
 # pod-ssh
 
-`pod-ssh` is a command-line utility for connecting to Kubernetes pods.
+`pod-ssh` is a searchable terminal interface for opening an interactive shell
+in Kubernetes pods. It is distributed as a standalone Go binary and does not
+require Python, `gum`, or `kubectl`.
 
 <p align="center">
-  <img src="./pod-ssh.gif">
+  <img src="./pod-ssh.gif" alt="pod-ssh terminal demo">
 </p>
 
-## Installation
+The existing command syntax remains supported:
 
 ```bash
-sudo curl -sSL \
-  https://raw.githubusercontent.com/eznix86/pod-ssh/main/pod-ssh \
-  -o /usr/local/bin/pod-ssh && \
-sudo chmod +x /usr/local/bin/pod-ssh
+pod-ssh
+pod-ssh api@production
+pod-ssh api@production bash
+pod-ssh history
+pod-ssh last
+pod-ssh last~2
 ```
 
-Ensure `/usr/local/bin` is in your `PATH`.
+## Features
 
+- Searchable pod, container, and history pickers.
+- Partial pod-name matching.
+- Colored output, loading spinners, and keyboard navigation.
+- Native Kubernetes API and interactive exec support.
+- Standard `KUBECONFIG` loading and current-context behavior.
+- Bash, Zsh, Fish, and PowerShell completion generation.
+- History compatibility with earlier versions of `pod-ssh`.
+- Native self-update support for release binaries.
 
-Note: **You can keep it as `pod-ssh` but it may also rename the script to any name you like, for example to `kssh` or `pssh`** 
+## Development
 
----
+The project uses [mise](https://mise.jdx.dev/) to pin its Go toolchain. Install
+the tools and build the binary with:
 
-## Dependencies
+```bash
+mise install
+mise run build
+```
 
-The script will install these automatically if missing:
+The binary is written to `bin/pod-ssh`.
 
-* [`gum`](https://github.com/charmbracelet/gum) – for interactive prompts and formatting
-* [`kubectl`](https://kubernetes.io/docs/tasks/tools/) – to interact with Kubernetes pods
+Run the project-owned checks and smoke tests with:
 
-Supported platforms:
+```bash
+mise run check
+mise run smoke
+mise run release-check
+mise run release-snapshot
+```
 
-| Platform      | gum install         | kubectl install       |
-| ------------- | ------------------- | --------------------- |
-| macOS         | Homebrew            | Homebrew              |
-| Arch Linux    | yay / paru / pacman | pacman                |
-| Debian/Ubuntu | apt + wget/tar      | apt + curl            |
-| Other Linux   | wget + tar          | curl (generic binary) |
+The check task applies `go fix`, formats the source, runs `go vet`, and executes
+the test suite with the race detector.
 
----
+Pushing a semantic version tag such as `v2.0.0` runs GoReleaser, publishes
+platform archives and checksums to GitHub Releases, generates release notes,
+and updates [CHANGELOG.md](CHANGELOG.md) on `main`.
 
 ## Usage
 
-```bash
-pod-ssh [COMMAND | POD@NAMESPACE]
-```
-
-### Commands
-
-| Command                 | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `pod-ssh`               | Interactive selection of namespace and pod |
-| `pod-ssh help`          | Show help                                  |
-| `pod-ssh history`       | Show interactive history selection         |
-| `pod-ssh clear-history` | Clear connection history with confirmation |
-| `pod-ssh last`          | Reconnect to the most recent pod           |
-| `pod-ssh last~N`        | Reconnect to the Nth most recent pod       |
-| `pod-ssh self-update`   | Update the script from GitHub              |
-
-### Direct Connection
-
-You can skip the interactive selection if you know the pod and namespace:
-
-```bash
-pod-ssh mypod@namespace
-```
-
-The script will:
-
-* Automatic ssh when matching the pod name or offer fuzzy matches interactively.
-    * `pod-ssh telemetry-app@telemetry-system` -> `pod-ssh telemetry-app-d4fd85895-r27tg@telemetry-system`
----
-
-## History and State
-
-`pod-ssh` maintains simple text files in your home directory:
-
-| File                 | Purpose                                  |
-| -------------------- | ---------------------------------------- |
-| `~/.pod_ssh_history` | Stores unique pod@namespace combinations |
-| `~/.pod_ssh_last`    | Stores the last 20 connections in order  |
-
-These files enable the `history` and `last` commands for fast reconnection.
-
----
-
-## Examples
-
-Interactive pod selection:
+Running without a target opens searchable namespace and pod pickers. The
+namespace configured by the current Kubernetes context is marked `current`:
 
 ```bash
 pod-ssh
 ```
 
-Start typing in the namespace or pod picker to search the available entries,
-then use the arrow keys and Enter to select one.
+Type `/` to filter the pod list, use the arrow keys to navigate, and press Enter
+to connect. If the selected pod has multiple containers, `pod-ssh` opens a
+second searchable picker.
 
-Reconnect to the last used pod:
+Use the compact `pod@namespace` syntax to select a namespace explicitly:
 
 ```bash
+pod-ssh telemetry@monitoring
+```
+
+An exact pod name connects immediately. A unique partial name also connects
+immediately; multiple matches open a searchable picker.
+
+Choose a shell using the existing second positional argument:
+
+```bash
+pod-ssh api@production bash
+```
+
+### History
+
+```bash
+pod-ssh history
 pod-ssh last
-```
-
-Reconnect to the third most recent pod:
-
-```bash
 pod-ssh last~3
-```
-
-Clear your history:
-
-```bash
 pod-ssh clear-history
 ```
 
-Show available commands:
+History remains in `~/.pod_ssh_history`, and the 20 most recent connections
+remain in `~/.pod_ssh_last`.
+
+### Kubeconfig
+
+`pod-ssh` follows Kubernetes' standard loading rules:
+
+1. Use the files listed by `KUBECONFIG` when it is set.
+2. Otherwise use `~/.kube/config`.
+3. Respect the current context and its default namespace.
+
+An explicit file can be supplied when needed:
 
 ```bash
-pod-ssh help
+pod-ssh --kubeconfig ./cluster.yaml
 ```
 
+Kubeconfig `exec` credential plugins are handled by the Kubernetes Go client.
+The external credential command referenced by such a kubeconfig must still be
+installed.
+
+### Shell completion
+
+Generate completion scripts with:
+
+```bash
+pod-ssh completion bash
+pod-ssh completion zsh
+pod-ssh completion fish
+pod-ssh completion powershell
+```
+
+Completion includes commands, pods in the current namespace, and namespaces
+after the `@` separator. Cluster-backed completion has a short timeout so an
+unavailable cluster does not block the shell.
+
+### Self-update
+
+Release binaries can update themselves with:
+
+```bash
+pod-ssh self-update
+```
+
+The executable's directory must be writable by the current user.
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
-
-
-## Contributing
-
-Contributions are welcome.
-To propose changes:
-
-1. Fork the repository
-2. Create a new branch
-3. Submit a pull request with a clear description of your changes
+This project is available under the [MIT License](LICENSE).

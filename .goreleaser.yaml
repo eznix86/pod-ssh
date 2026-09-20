@@ -1,0 +1,54 @@
+version: 2
+
+project_name: pod-ssh
+
+builds:
+  - id: pod-ssh
+    main: .
+    binary: pod-ssh
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/eznix86/pod-ssh/cmd.Version={{ .Version }}
+
+archives:
+  - ids:
+      - pod-ssh
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: github-native
+
+release:
+  github:
+    owner: eznix86
+    name: pod-ssh
+  name_template: '{{ .Tag }}'
+  mode: keep-existing
+  replace_existing_artifacts: true
