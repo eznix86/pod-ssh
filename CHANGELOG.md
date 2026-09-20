@@ -1,6 +1,17 @@
 # Release Notes
 
-## [Unreleased](https://github.com/eznix86/pod-ssh/compare/v2.0.0...HEAD)
+## [Unreleased](https://github.com/eznix86/pod-ssh/compare/v2.0.1...HEAD)
+
+## [v2.0.1](https://github.com/eznix86/pod-ssh/compare/v2.0.0...v2.0.1) - 2026-09-20
+
+<!-- Release notes generated using configuration in .github/release.yml at v2.0.1 -->
+### What's Changed
+
+#### Other Changes
+
+* fix: improve shell startup by @eznix86 in https://github.com/eznix86/pod-ssh/pull/5
+
+**Full Changelog**: https://github.com/eznix86/pod-ssh/compare/v2.0.0...v2.0.1
 
 ## [v2.0.0](https://github.com/eznix86/pod-ssh/compare/v1.2.0...v2.0.0) - 2026-09-20
 
