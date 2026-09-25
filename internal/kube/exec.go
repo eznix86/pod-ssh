@@ -25,6 +25,7 @@ type ExecOptions struct {
 	Stdin     io.Reader
 	Stdout    io.Writer
 	Stderr    io.Writer
+	TTY       bool
 }
 
 // IsCommandNotFound reports whether Kubernetes rejected an exec command
@@ -38,7 +39,7 @@ func IsCommandNotFound(err error) bool {
 		strings.Contains(message, "command not found")
 }
 
-// Exec starts an interactive TTY command in a pod container.
+// Exec runs a command in a pod container, attached to a TTY when options.TTY is set.
 func (c *Client) Exec(ctx context.Context, options ExecOptions) error {
 	request := c.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
@@ -48,10 +49,10 @@ func (c *Client) Exec(ctx context.Context, options ExecOptions) error {
 		VersionedParams(&corev1.PodExecOptions{
 			Container: options.Container,
 			Command:   options.Command,
-			Stdin:     true,
+			Stdin:     options.Stdin != nil,
 			Stdout:    true,
 			Stderr:    true,
-			TTY:       true,
+			TTY:       options.TTY,
 		}, scheme.ParameterCodec)
 
 	websocketExecutor, err := remotecommand.NewWebSocketExecutor(c.restConfig, http.MethodGet, request.URL().String())
@@ -71,6 +72,17 @@ func (c *Client) Exec(ctx context.Context, options ExecOptions) error {
 	)
 	if err != nil {
 		return fmt.Errorf("create fallback executor: %w", err)
+	}
+
+	if !options.TTY {
+		if err := executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdin:  options.Stdin,
+			Stdout: options.Stdout,
+			Stderr: options.Stderr,
+		}); err != nil {
+			return fmt.Errorf("exec %v in %s@%s: %w", options.Command, options.Pod, options.Namespace, err)
+		}
+		return nil
 	}
 
 	file, ok := options.Stdin.(*os.File)

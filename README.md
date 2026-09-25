@@ -92,9 +92,9 @@ Choose a shell using the existing second positional argument:
 pod-ssh api@production bash
 ```
 
-If the requested shell is not installed in the container, `pod-ssh` tries the
-other common shells (`sh`, `bash`, and `zsh`) before returning the original
-exec error.
+Without a shell argument, `pod-ssh` opens the first of `sh`, `bash`, and `zsh`
+installed in the container. If the requested shell is not installed, it says so
+and opens the first of those that is.
 
 ### History
 
