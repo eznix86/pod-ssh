@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/eznix86/pod-ssh/internal/history"
 	"github.com/eznix86/pod-ssh/internal/kube"
@@ -60,7 +60,7 @@ func newRootCommand(options *options) *cobra.Command {
 			if len(args) > 0 && strings.HasPrefix(args[0], "last~") {
 				return runLast(command.Context(), options, strings.TrimPrefix(args[0], "last~"))
 			}
-			shell := "sh"
+			shell := ""
 			if len(args) == 2 {
 				shell = args[1]
 			}
@@ -318,53 +318,42 @@ func runConnection(ctx context.Context, options *options, targetValue string, co
 		container = selected.Name
 	}
 
-	color.New(color.FgCyan).Fprintf(options.errOutput, "Connecting to %s@%s (%s)...\n", podName, namespace, container)
-	if err := execShell(ctx, client, options, namespace, podName, container, command); err != nil {
+	statusOutput := io.Discard
+	if isTerminal(options.errOutput) {
+		statusOutput = options.errOutput
+	}
+	status := newConnectionStatus(statusOutput, fmt.Sprintf("%s@%s (%s)", podName, namespace, container))
+	exec := kube.ExecOptions{
+		Namespace: namespace,
+		Pod:       podName,
+		Container: container,
+		Stdin:     options.input,
+		Stdout:    status.wrap(options.output),
+		Stderr:    status.wrap(options.errOutput),
+		TTY:       true,
+	}
+	if err := execShell(ctx, client, exec, status, command[0]); err != nil {
+		status.failed()
 		return err
 	}
 	return options.store.Save(target.Target{Pod: podName, Namespace: namespace}.String())
 }
 
-var fallbackShells = []string{"sh", "bash", "zsh"}
-
-func execShell(ctx context.Context, client *kube.Client, options *options, namespace, podName, container string, command []string) error {
-	if len(command) == 0 {
-		return fmt.Errorf("no shell command provided")
-	}
-
-	preferred := command[0]
-	tried := make([]string, 0, len(fallbackShells))
-	var lastErr error
-	for _, shell := range append([]string{preferred}, fallbackShells...) {
-		if shell == "" || containsShell(tried, shell) {
-			continue
-		}
-		tried = append(tried, shell)
-		if err := client.Exec(ctx, kube.ExecOptions{
-			Namespace: namespace,
-			Pod:       podName,
-			Container: container,
-			Command:   []string{shell},
-			Stdin:     options.input,
-			Stdout:    options.output,
-			Stderr:    options.errOutput,
-		}); err != nil {
-			if !kube.IsCommandNotFound(err) {
-				return err
-			}
-			lastErr = err
-			if len(tried) < len(fallbackShells) {
-				fmt.Fprintf(options.errOutput, "Shell %q is unavailable; trying another shell...\n", shell)
-			}
-			continue
-		}
-		return nil
-	}
-	return fmt.Errorf("no supported shell found in container (tried %s): %w", strings.Join(tried, ", "), lastErr)
+func isTerminal(stream any) bool {
+	file, ok := stream.(*os.File)
+	return ok && term.IsTerminal(int(file.Fd()))
 }
 
-func containsShell(shells []string, target string) bool {
-	return slices.Contains(shells, target)
+func execShell(ctx context.Context, client *kube.Client, exec kube.ExecOptions, status *connectionStatus, preferred string) error {
+	shell, err := client.FindShell(ctx, exec.Namespace, exec.Pod, exec.Container, append([]string{preferred}, kube.Shells...)...)
+	if err != nil {
+		return err
+	}
+	if preferred != "" && shell != preferred {
+		status.note(fmt.Sprintf("Shell %q is unavailable; using %q.", preferred, shell))
+	}
+	exec.Command = []string{shell}
+	return client.Exec(ctx, exec)
 }
 
 func selectNamespace(ctx context.Context, client *kube.Client, options *options) (string, error) {
