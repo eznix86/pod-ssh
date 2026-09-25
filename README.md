@@ -96,6 +96,19 @@ Without a shell argument, `pod-ssh` opens the first of `sh`, `bash`, and `zsh`
 installed in the container. If the requested shell is not installed, it says so
 and opens the first of those that is.
 
+Any other words after the target run as a command, like `ssh host command`:
+
+```bash
+pod-ssh proxy@nginx cat /etc/nginx/nginx.conf
+pod-ssh api@production ls -la /app
+pod-ssh api@production cat /app/.env > local.env
+```
+
+Flags placed after the target belong to the remote command, so put
+`--kubeconfig` before it. A TTY is used only when both stdin and stdout are
+terminals, so piped output stays clean. `pod-ssh` exits with the command's exit
+code.
+
 ### History
 
 ```bash
