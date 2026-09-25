@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -443,14 +444,17 @@ func shortDuration(duration time.Duration) string {
 
 func completeTargets(options *options) cobra.CompletionFunc {
 	return func(command *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		if len(args) > 0 {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
 		ctx, cancel := context.WithTimeout(command.Context(), 2*time.Second)
 		defer cancel()
 		client, err := kube.New(options.kubeconfig)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError | cobra.ShellCompDirectiveNoFileComp
+		}
+		if len(args) > 1 || (len(args) == 1 && strings.Contains(toComplete, "/")) {
+			return completeRemotePaths(ctx, client, args[0], toComplete)
+		}
+		if len(args) > 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 		if before, after, ok := strings.Cut(toComplete, "@"); ok {
 			podQuery := before
@@ -482,4 +486,59 @@ func completeTargets(options *options) cobra.CompletionFunc {
 		}
 		return matches, cobra.ShellCompDirectiveNoFileComp
 	}
+}
+
+const remoteGlob = `for f in "$1"*; do if [ -d "$f" ]; then echo "$f/"; elif [ -e "$f" ]; then echo "$f"; fi; done`
+
+func completeRemotePaths(ctx context.Context, client *kube.Client, targetValue, toComplete string) ([]string, cobra.ShellCompDirective) {
+	parsed, err := target.Parse(targetValue)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	namespace := client.Namespace()
+	if parsed.Namespace != "" {
+		namespace = parsed.Namespace
+	}
+	pods, err := client.Pods(ctx, namespace)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	matches := kube.MatchingPods(pods, parsed.Pod)
+	if len(matches) != 1 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	containers, err := client.Containers(ctx, namespace, matches[0].Name)
+	if err != nil || len(containers) == 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	shell, err := client.FindShell(ctx, namespace, matches[0].Name, containers[0], kube.Shells...)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	var output bytes.Buffer
+	if err := client.Exec(ctx, kube.ExecOptions{
+		Namespace: namespace,
+		Pod:       matches[0].Name,
+		Container: containers[0],
+		Command:   []string{shell, "-c", remoteGlob, shell, toComplete},
+		Stdout:    &output,
+		Stderr:    io.Discard,
+	}); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return pathCompletions(output.String())
+}
+
+func pathCompletions(output string) ([]string, cobra.ShellCompDirective) {
+	paths := []string{}
+	for line := range strings.Lines(output) {
+		if path := strings.TrimSuffix(line, "\n"); path != "" {
+			paths = append(paths, path)
+		}
+	}
+	directive := cobra.ShellCompDirectiveNoFileComp
+	if len(paths) == 1 && strings.HasSuffix(paths[0], "/") {
+		directive |= cobra.ShellCompDirectiveNoSpace
+	}
+	return paths, directive
 }

@@ -154,6 +154,10 @@ Completion includes commands, pods in the current namespace, and namespaces
 after the `@` separator. Cluster-backed completion has a short timeout so an
 unavailable cluster does not block the shell.
 
+After the target, completion lists paths inside the pod's first container, so
+`pod-ssh proxy@nginx cat /etc/ng<Tab>` becomes `/etc/nginx/`. This needs `sh`,
+`bash`, or `zsh` in the container and a target that matches exactly one pod.
+
 ### Self-update
 
 Release binaries can update themselves with:

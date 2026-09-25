@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,6 +72,32 @@ func TestRemoteCommand(t *testing.T) {
 			command, interactive := remoteCommand(test.args)
 			assert.Equal(t, test.command, command)
 			assert.Equal(t, test.interactive, interactive)
+		})
+	}
+}
+
+func TestPathCompletions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		output    string
+		paths     []string
+		directive cobra.ShellCompDirective
+	}{
+		{name: "no match offers nothing", output: "", paths: []string{}, directive: cobra.ShellCompDirectiveNoFileComp},
+		{name: "one file ends the word", output: "/etc/hostname\n", paths: []string{"/etc/hostname"}, directive: cobra.ShellCompDirectiveNoFileComp},
+		{name: "one directory keeps the word open", output: "/etc/nginx/\n", paths: []string{"/etc/nginx/"}, directive: cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace},
+		{name: "a name with spaces stays one path", output: "/srv/my notes.txt\n", paths: []string{"/srv/my notes.txt"}, directive: cobra.ShellCompDirectiveNoFileComp},
+		{name: "several matches are all offered", output: "/etc/nginx/\n/etc/network/\n", paths: []string{"/etc/nginx/", "/etc/network/"}, directive: cobra.ShellCompDirectiveNoFileComp},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			paths, directive := pathCompletions(test.output)
+			assert.Equal(t, test.paths, paths)
+			assert.Equal(t, test.directive, directive)
 		})
 	}
 }
