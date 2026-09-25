@@ -1,6 +1,19 @@
 # Release Notes
 
-## [Unreleased](https://github.com/eznix86/pod-ssh/compare/v2.0.1...HEAD)
+## [Unreleased](https://github.com/eznix86/pod-ssh/compare/v2.1.0...HEAD)
+
+## [v2.1.0](https://github.com/eznix86/pod-ssh/compare/v2.0.1...v2.1.0) - 2026-09-25
+
+<!-- Release notes generated using configuration in .github/release.yml at v2.1.0 -->
+### What's Changed
+
+#### Other Changes
+
+* fix: show connection status on one line and find an installed shell before connecting by @eznix86 in https://github.com/eznix86/pod-ssh/pull/6
+* feat: run a command in the pod after the target by @eznix86 in https://github.com/eznix86/pod-ssh/pull/7
+* feat: complete file paths inside the pod by @eznix86 in https://github.com/eznix86/pod-ssh/pull/8
+
+**Full Changelog**: https://github.com/eznix86/pod-ssh/compare/v2.0.1...v2.1.0
 
 ## [v2.0.1](https://github.com/eznix86/pod-ssh/compare/v2.0.0...v2.0.1) - 2026-09-20
 
