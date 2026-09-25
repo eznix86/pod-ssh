@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"golang.org/x/term"
 )
 
 type doneMessage struct{ err error }
@@ -21,7 +23,10 @@ type spinnerModel struct {
 }
 
 // Spin displays an animated spinner until work completes.
-func Spin(ctx context.Context, title string, output io.Writer, work func() error) error {
+func Spin(ctx context.Context, title string, input io.Reader, output io.Writer, work func() error) error {
+	if !isTerminal(input) || !isTerminal(output) {
+		return work()
+	}
 	model := spinnerModel{
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
 		title:   title,
@@ -67,4 +72,9 @@ func (m spinnerModel) View() tea.View {
 
 func errorsNewUnexpectedModel() error {
 	return fmt.Errorf("progress display returned an unexpected model")
+}
+
+func isTerminal(stream any) bool {
+	file, ok := stream.(*os.File)
+	return ok && term.IsTerminal(int(file.Fd()))
 }

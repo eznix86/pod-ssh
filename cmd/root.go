@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -51,26 +52,24 @@ func Execute() error {
 
 func newRootCommand(options *options) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "pod-ssh [POD@NAMESPACE] [SHELL]",
+		Use:           "pod-ssh [POD@NAMESPACE] [SHELL | COMMAND...]",
 		Short:         "Connect to Kubernetes pods quickly",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          cobra.MaximumNArgs(2),
+		Args:          cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) > 0 && strings.HasPrefix(args[0], "last~") {
 				return runLast(command.Context(), options, strings.TrimPrefix(args[0], "last~"))
 			}
-			shell := ""
-			if len(args) == 2 {
-				shell = args[1]
-			}
 			targetValue := ""
 			if len(args) > 0 {
 				targetValue = args[0]
+				args = args[1:]
 			}
-			return runConnection(command.Context(), options, targetValue, []string{shell})
+			return runConnection(command.Context(), options, targetValue, args)
 		},
 	}
+	root.Flags().SetInterspersed(false)
 	root.SetIn(options.input)
 	root.SetOut(options.output)
 	root.SetErr(options.errOutput)
@@ -214,7 +213,7 @@ func newUpdateCommand(options *options) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			var result updater.Result
-			err := ui.Spin(command.Context(), "Checking for updates...", command.OutOrStdout(), func() error {
+			err := ui.Spin(command.Context(), "Checking for updates...", command.InOrStdin(), command.OutOrStdout(), func() error {
 				var updateErr error
 				result, updateErr = updater.InstallLatest(command.Context(), Version)
 				return updateErr
@@ -237,7 +236,17 @@ func newUpdateCommand(options *options) *cobra.Command {
 	}
 }
 
-func runConnection(ctx context.Context, options *options, targetValue string, command []string) error {
+func remoteCommand(args []string) ([]string, bool) {
+	if len(args) == 0 {
+		return nil, true
+	}
+	if len(args) == 1 && slices.Contains(kube.Shells, args[0]) {
+		return args, true
+	}
+	return args, false
+}
+
+func runConnection(ctx context.Context, options *options, targetValue string, args []string) error {
 	client, err := kube.New(options.kubeconfig)
 	if err != nil {
 		return err
@@ -265,7 +274,7 @@ func runConnection(ctx context.Context, options *options, targetValue string, co
 	}
 
 	var pods []kube.Pod
-	if err := ui.Spin(ctx, fmt.Sprintf("Loading pods from %s/%s...", client.Context(), namespace), options.output, func() error {
+	if err := ui.Spin(ctx, fmt.Sprintf("Loading pods from %s/%s...", client.Context(), namespace), options.input, options.errOutput, func() error {
 		var listErr error
 		pods, listErr = client.Pods(ctx, namespace)
 		return listErr
@@ -308,7 +317,7 @@ func runConnection(ctx context.Context, options *options, targetValue string, co
 		for _, name := range containers {
 			items = append(items, ui.Item{Name: name})
 		}
-		selected, err := ui.Select("Select a container", items, options.input, options.output)
+		selected, err := ui.Select("Select a container", items, options.input, options.errOutput)
 		if errors.Is(err, ui.ErrCancelled) {
 			return nil
 		}
@@ -330,9 +339,20 @@ func runConnection(ctx context.Context, options *options, targetValue string, co
 		Stdin:     options.input,
 		Stdout:    status.wrap(options.output),
 		Stderr:    status.wrap(options.errOutput),
-		TTY:       true,
+		TTY:       isTerminal(options.input) && isTerminal(options.output),
 	}
-	if err := execShell(ctx, client, exec, status, command[0]); err != nil {
+	command, interactive := remoteCommand(args)
+	if interactive {
+		preferred := ""
+		if len(command) == 1 {
+			preferred = command[0]
+		}
+		err = execShell(ctx, client, exec, status, preferred)
+	} else {
+		exec.Command = command
+		err = client.Exec(ctx, exec)
+	}
+	if err != nil {
 		status.failed()
 		return err
 	}
@@ -345,6 +365,9 @@ func isTerminal(stream any) bool {
 }
 
 func execShell(ctx context.Context, client *kube.Client, exec kube.ExecOptions, status *connectionStatus, preferred string) error {
+	if !exec.TTY {
+		return fmt.Errorf("an interactive shell requires a terminal")
+	}
 	shell, err := client.FindShell(ctx, exec.Namespace, exec.Pod, exec.Container, append([]string{preferred}, kube.Shells...)...)
 	if err != nil {
 		return err
@@ -358,7 +381,7 @@ func execShell(ctx context.Context, client *kube.Client, exec kube.ExecOptions, 
 
 func selectNamespace(ctx context.Context, client *kube.Client, options *options) (string, error) {
 	var namespaces []string
-	if err := ui.Spin(ctx, "Loading namespaces from "+client.Context()+"...", options.output, func() error {
+	if err := ui.Spin(ctx, "Loading namespaces from "+client.Context()+"...", options.input, options.errOutput, func() error {
 		var listErr error
 		namespaces, listErr = client.Namespaces(ctx)
 		return listErr
@@ -376,7 +399,7 @@ func selectNamespace(ctx context.Context, client *kube.Client, options *options)
 		}
 		items = append(items, ui.Item{Name: namespace, Detail: detail})
 	}
-	selected, err := ui.Select("Namespaces in "+client.Context(), items, options.input, options.output)
+	selected, err := ui.Select("Namespaces in "+client.Context(), items, options.input, options.errOutput)
 	if err != nil {
 		return "", err
 	}
@@ -398,7 +421,7 @@ func selectPod(namespace string, pods []kube.Pod, options *options) (string, err
 			),
 		})
 	}
-	selected, err := ui.Select("Pods in "+namespace, items, options.input, options.output)
+	selected, err := ui.Select("Pods in "+namespace, items, options.input, options.errOutput)
 	if err != nil {
 		return "", err
 	}
